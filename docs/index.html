@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DataP</title>
+  <meta name="description" content="DataP: espacio para organizar proyectos y análisis de datos. Incluye el análisis PCA de segmentación de clientes y un laboratorio para repetirlo con tus propios datos.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232a78d6'/%3E%3Cg fill='%23fff'%3E%3Ccircle cx='11' cy='19' r='2.6'/%3E%3Ccircle cx='16' cy='13' r='2.6'/%3E%3Ccircle cx='22' cy='9' r='2.6'/%3E%3Ccircle cx='21' cy='20' r='2.6'/%3E%3C/g%3E%3C/svg%3E">
+  <script>
+    // Aplica el tema guardado antes de pintar para evitar parpadeos.
+    (function () {
+      try {
+        var t = localStorage.getItem('datap-theme');
+        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#view">Saltar al contenido</a>
+
+  <div class="app">
+    <aside class="sidebar" id="sidebar" aria-label="Navegación principal">
+      <a class="brand" href="#/inicio">
+        <span class="brand-mark" data-icon="scatter"></span>
+        <span class="brand-text">
+          <span class="brand-name">DataP</span>
+          <span class="brand-tag">Organización de datos</span>
+        </span>
+      </a>
+
+      <nav class="nav" id="nav"></nav>
+
+      <div class="sidebar-footer">
+        <button type="button" class="nav-link" id="theme-toggle"></button>
+        <a class="nav-link" id="repo-link" href="#" target="_blank" rel="noopener"></a>
+      </div>
+    </aside>
+
+    <div class="scrim" id="scrim" hidden></div>
+
+    <div class="main">
+      <header class="topbar">
+        <button type="button" class="icon-btn" id="menu-btn" aria-controls="sidebar" aria-expanded="false" aria-label="Abrir menú">
+          <span data-icon="menu"></span>
+        </button>
+        <a class="brand" href="#/inicio">
+          <span class="brand-mark" data-icon="scatter"></span>
+          <span class="brand-text"><span class="brand-name">DataP</span></span>
+        </a>
+      </header>
+
+      <main id="view" class="view" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <noscript>
+    <p style="padding:24px">Esta web necesita JavaScript para funcionar.</p>
+  </noscript>
+
+  <!-- Núcleo -->
+  <script src="assets/js/app.js"></script>
+
+  <!-- Librerías propias (sin dependencias externas) -->
+  <script src="assets/js/lib/pca.js"></script>
+  <script src="assets/js/lib/file-reader.js"></script>
+  <script src="assets/js/lib/charts.js"></script>
+
+  <!-- Datos de los proyectos -->
+  <script src="assets/data/pca-clientes.js"></script>
+
+  <!-- Módulos (cada uno se registra solo en el menú) -->
+  <script src="assets/js/modules/inicio.js"></script>
+  <script src="assets/js/modules/analisis-pca.js"></script>
+  <script src="assets/js/modules/laboratorio.js"></script>
+</body>
+</html>
