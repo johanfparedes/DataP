@@ -350,6 +350,9 @@
           '<button type="button" class="btn" data-action="dl-loadings">' + icon('download') + 'Cargas factoriales</button>' +
           '<button type="button" class="btn" data-action="dl-variance">' + icon('download') + 'Varianza explicada</button>' +
         '</div>' +
+        '<div class="card" style="margin-top:16px"><div class="card-head"><div><div class="card-title">Guardar en tu espacio</div>' +
+          '<p class="card-sub">Crea una nota con el resumen de este análisis dentro de un proyecto, para no perderlo.</p></div>' +
+          '<button type="button" class="btn btn-primary" data-action="save-note">' + icon('note') + 'Guardar como nota</button></div></div>' +
       '</section>';
   }
 
@@ -436,6 +439,43 @@
   }
 
   /* ------------------------------------------------------------------------
+     Guardar el resumen como nota de un proyecto
+     ------------------------------------------------------------------------ */
+  function summaryMarkdown(res) {
+    var lines = [];
+    var two = res.cumulative[Math.min(1, res.cumulative.length - 1)];
+    lines.push('## Datos');
+    lines.push('- Archivo: `' + (state.fileName || 'datos') + '`' + (state.isSample ? ' (datos sintéticos de ejemplo)' : ''));
+    lines.push('- ' + res.n + ' filas y ' + res.p + ' variables: ' + res.names.join(', '));
+    lines.push('');
+    lines.push('## Resultados');
+    lines.push('- CP1 explica el **' + pct(res.explained[0]) + '** de la varianza; CP1 + CP2, el **' + pct(two) + '**.');
+    lines.push('- Componentes para llegar al 80%: **' + res.k80 + '**.');
+    conclusions(res).slice(2).forEach(function (c) { lines.push('- ' + c); });
+    lines.push('');
+    lines.push('## Próximos pasos');
+    lines.push('- [ ] Interpretar qué representa cada componente para el negocio');
+    return lines.join('\n');
+  }
+
+  function saveAsNote(res) {
+    var UI = DataP.ui;
+    var base = (state.fileName || 'datos').replace(/\.[^.]+$/, '');
+    UI.dialog({
+      title: 'Guardar como nota',
+      size: 'sm',
+      body:
+        '<label class="fld"><span class="fld-label">Título</span><input class="input" name="title" required maxlength="160" value="' + esc('Análisis PCA · ' + base) + '" autofocus></label>' +
+        '<label class="fld"><span class="fld-label">Proyecto</span><select class="input" name="projectId">' + UI.projectOptions('pca-clientes') + '</select></label>',
+      actions: [{ value: 'cancel', label: 'Cancelar' }, { value: 'save', label: 'Guardar nota', kind: 'primary' }],
+      onAction: function (value, form) {
+        var n = DataP.store.addNote({ title: form.title.value.trim() || 'Análisis PCA', body: summaryMarkdown(res), projectId: form.projectId.value });
+        UI.toast('Nota guardada', { action: { label: 'Abrir', run: function () { DataP.navigate('notas', n.id); } } });
+      },
+    });
+  }
+
+  /* ------------------------------------------------------------------------
      Registro del módulo
      ------------------------------------------------------------------------ */
   DataP.registerModule({
@@ -445,9 +485,7 @@
     icon: 'flask',
     order: 10,
     summary: 'Carga un Excel o CSV y repite el análisis del notebook en el navegador: correlación, varianza, cargas y mapa de segmentación.',
-    status: 'Herramienta',
-    statusClass: 'status-tool',
-    tags: ['.xlsx', '.csv', 'Sin instalar nada'],
+    keywords: 'pca excel csv subir archivo analisis componentes',
 
     render: function (root) {
       root.innerHTML =
@@ -565,7 +603,9 @@
 
       resultsEl.addEventListener('click', function (e) {
         var btn = e.target.closest('button[data-action]');
-        if (btn && lastResult) download(btn.getAttribute('data-action'), lastResult);
+        if (!btn || !lastResult) return;
+        if (btn.getAttribute('data-action') === 'save-note') saveAsNote(lastResult);
+        else download(btn.getAttribute('data-action'), lastResult);
       });
 
       function refresh() {

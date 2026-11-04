@@ -24,14 +24,13 @@
   DataP.registerModule({
     id: 'analisis-pca',
     title: 'Segmentación de clientes con PCA',
-    navLabel: 'Segmentación de clientes',
-    section: 'Proyectos',
+    navLabel: 'Reporte · Segmentación de clientes',
+    nav: false,
+    project: 'pca-clientes',
+    keywords: 'reporte pca componentes principales clientes notebook',
     icon: 'scatter',
     order: 10,
     summary: 'Reducción de 8 variables de compra a 2 componentes principales para identificar perfiles de clientes y decidir a quién priorizar.',
-    status: 'Completado',
-    statusClass: 'status-done',
-    tags: ['PCA', '50 clientes', 'Colab'],
 
     render: function (root) {
       var D = DataP.data.pcaClientes;
@@ -68,8 +67,10 @@
       }).join('');
 
       root.innerHTML =
-        '<header class="page-header">' +
-          '<span class="eyebrow">Proyecto</span>' +
+        '<nav class="crumbs" aria-label="Ruta"><a href="#/proyectos">Proyectos</a><span class="sep">›</span>' +
+          '<a href="#/proyectos/pca-clientes">Segmentación de clientes</a><span class="sep">›</span><span>Reporte</span></nav>' +
+        '<header class="page-header" style="margin-top:10px">' +
+          '<span class="eyebrow">Reporte del notebook</span>' +
           '<h1>' + esc(D.titulo) + '</h1>' +
           '<p class="lede">Análisis de Componentes Principales (PCA) sobre el comportamiento de compra de ' + D.observaciones +
             ' clientes. Resume ' + p + ' variables en 2 componentes para identificar perfiles y decidir a quién priorizar.</p>' +
