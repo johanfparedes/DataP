@@ -4,12 +4,14 @@
      (modo privado estricto), funciona en memoria y lo avisa.
    - Se sincroniza entre pestañas abiertas.
    - Exportar / importar JSON para respaldos o para pasar a otro equipo.
+   Contiene: proyectos, tareas (con subtareas y repetición), notas, hábitos
+   y sesiones de enfoque.
    ========================================================================== */
 (function () {
   'use strict';
 
   var KEY = 'datap-workspace-v1';
-  var VERSION = 1;
+  var VERSION = 2;
   var listeners = [];
   var state = null;
   var persistent = true;
@@ -30,6 +32,13 @@
     { id: 'pausado', label: 'En pausa' },
     { id: 'completado', label: 'Completado' },
   ];
+  var REPEATS = [
+    { id: '', label: 'No se repite' },
+    { id: 'daily', label: 'Cada día' },
+    { id: 'weekdays', label: 'Días laborables' },
+    { id: 'weekly', label: 'Cada semana' },
+    { id: 'monthly', label: 'Cada mes' },
+  ];
   var COLORS = [
     { id: 1, label: 'Azul' }, { id: 2, label: 'Naranja' }, { id: 3, label: 'Aguamarina' }, { id: 4, label: 'Amarillo' },
     { id: 5, label: 'Rosa' }, { id: 6, label: 'Verde' }, { id: 7, label: 'Violeta' }, { id: 8, label: 'Rojo' },
@@ -48,6 +57,42 @@
     d.setDate(d.getDate() + (offsetDays || 0));
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
   }
+  function toDayStr(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function parseDayStr(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || '');
+    return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+  }
+  function addDays(s, n) {
+    var d = parseDayStr(s) || new Date();
+    d.setDate(d.getDate() + n);
+    return toDayStr(d);
+  }
+
+  /** Siguiente fecha de una tarea que se repite (siempre posterior a hoy). */
+  function nextDue(due, repeat) {
+    var today = dayStr(0);
+    var base = due || today;
+    function step(s) {
+      var d = parseDayStr(s);
+      if (repeat === 'daily') d.setDate(d.getDate() + 1);
+      else if (repeat === 'weekly') d.setDate(d.getDate() + 7);
+      else if (repeat === 'monthly') {
+        var day = d.getDate();
+        d.setDate(1);
+        d.setMonth(d.getMonth() + 1);
+        var last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+        d.setDate(Math.min(day, last));
+      } else if (repeat === 'weekdays') {
+        do { d.setDate(d.getDate() + 1); } while (d.getDay() === 0 || d.getDay() === 6);
+      }
+      return toDayStr(d);
+    }
+    var next = step(base);
+    var guard = 0;
+    while (next <= today && guard++ < 1000) next = step(next);
+    return next;
+  }
+
   function isoDaysAgo(days) {
     var d = new Date();
     d.setDate(d.getDate() - days);
@@ -139,7 +184,13 @@
       },
     ];
 
-    return { version: VERSION, createdAt: t, updatedAt: t, projects: projects, tasks: tasks, notes: notes };
+    var habits = [
+      { id: uid('h_'), name: 'Revisar el panel y elegir 3 prioridades', days: [1, 2, 3, 4, 5], color: 1, log: {}, createdAt: t, updatedAt: t },
+      { id: uid('h_'), name: 'Leer 20 minutos', days: [0, 1, 2, 3, 4, 5, 6], color: 3, log: {}, createdAt: t, updatedAt: t },
+      { id: uid('h_'), name: 'Moverme 30 minutos', days: [0, 1, 2, 3, 4, 5, 6], color: 2, log: {}, createdAt: t, updatedAt: t },
+    ];
+
+    return { version: VERSION, createdAt: t, updatedAt: t, projects: projects, tasks: tasks, notes: notes, habits: habits, focus: [] };
   }
 
   function normalize(s) {
@@ -151,6 +202,8 @@
       projects: Array.isArray(s.projects) ? s.projects : [],
       tasks: Array.isArray(s.tasks) ? s.tasks : [],
       notes: Array.isArray(s.notes) ? s.notes : [],
+      habits: Array.isArray(s.habits) ? s.habits : [],
+      focus: Array.isArray(s.focus) ? s.focus : [],
     };
   }
 
@@ -306,6 +359,12 @@
     return top ? list[0].order - 1 : list[list.length - 1].order + 1;
   }
 
+  function cleanSubtasks(list) {
+    return (Array.isArray(list) ? list : []).filter(function (x) { return x && String(x.title || '').trim(); }).map(function (x) {
+      return { id: x.id || uid('s_'), title: String(x.title).trim(), done: !!x.done };
+    });
+  }
+
   function addTask(data) {
     var t = nowIso();
     var status = data.status || 'todo';
@@ -317,6 +376,8 @@
       priority: data.priority || 'media',
       due: data.due || '',
       projectId: data.projectId || '',
+      subtasks: cleanSubtasks(data.subtasks),
+      repeat: data.repeat || '',
       order: edgeOrder(status, status !== 'done'),
       createdAt: t, updatedAt: t,
       completedAt: status === 'done' ? t : null,
@@ -330,14 +391,32 @@
     var item = task(id);
     if (!item) return null;
     var prevStatus = item.status;
-    Object.keys(patch).forEach(function (k) { if (k !== 'id') item[k] = patch[k]; });
+    Object.keys(patch).forEach(function (k) { if (k !== 'id') item[k] = k === 'subtasks' ? cleanSubtasks(patch[k]) : patch[k]; });
+    var spawned = null;
     if (patch.status && patch.status !== prevStatus) {
       item.completedAt = patch.status === 'done' ? nowIso() : null;
       // Al cambiar de columna sin posición explícita, la tarea queda arriba.
       if (patch.order == null) item.order = edgeOrder(patch.status, true);
+      // Tarea que se repite: al terminarla se crea la siguiente.
+      if (patch.status === 'done' && item.repeat && !(item.nextId && task(item.nextId))) {
+        spawned = {
+          id: uid('t_'), title: item.title, description: item.description, status: 'todo', priority: item.priority,
+          due: nextDue(item.due, item.repeat), projectId: item.projectId, repeat: item.repeat,
+          subtasks: (item.subtasks || []).map(function (st) { return { id: uid('s_'), title: st.title, done: false }; }),
+          order: edgeOrder('todo', true), createdAt: nowIso(), updatedAt: nowIso(), completedAt: null,
+        };
+        state.tasks.push(spawned);
+        item.nextId = spawned.id;
+      }
+      // Si se reabre, se quita la repetición creada (si aún no se empezó).
+      if (prevStatus === 'done' && patch.status !== 'done' && item.nextId) {
+        var nx = task(item.nextId);
+        if (nx && nx.status === 'todo') state.tasks.splice(state.tasks.indexOf(nx), 1);
+        item.nextId = null;
+      }
     }
     item.updatedAt = nowIso();
-    commit({ kind: 'task', id: id, action: 'update' });
+    commit({ kind: 'task', id: id, action: 'update', spawned: spawned ? spawned.id : null });
     return item;
   }
 
@@ -421,6 +500,154 @@
   }
 
   /* ------------------------------------------------------------------------
+     Hábitos
+     days: días de la semana en que toca (0 = domingo … 6 = sábado)
+     log:  { 'AAAA-MM-DD': true } días cumplidos
+     ------------------------------------------------------------------------ */
+  function habits() { return state.habits.filter(function (h) { return !h.archived; }); }
+  function habit(id) { return state.habits.filter(function (h) { return h.id === id; })[0] || null; }
+
+  function addHabit(data) {
+    var t = nowIso();
+    var used = state.habits.map(function (h) { return h.color; });
+    var h = {
+      id: uid('h_'),
+      name: String(data.name || '').trim() || 'Hábito',
+      days: Array.isArray(data.days) && data.days.length ? data.days.slice().sort() : [0, 1, 2, 3, 4, 5, 6],
+      color: data.color || (COLORS.filter(function (c) { return used.indexOf(c.id) < 0; })[0] || COLORS[state.habits.length % COLORS.length]).id,
+      log: {},
+      createdAt: t, updatedAt: t,
+    };
+    state.habits.push(h);
+    commit({ kind: 'habit', id: h.id, action: 'add' });
+    return h;
+  }
+
+  function updateHabit(id, patch) {
+    var h = habit(id);
+    if (!h) return null;
+    Object.keys(patch).forEach(function (k) { if (k !== 'id' && k !== 'log') h[k] = patch[k]; });
+    h.updatedAt = nowIso();
+    commit({ kind: 'habit', id: id, action: 'update' });
+    return h;
+  }
+
+  function removeHabit(id) {
+    var idx = state.habits.findIndex(function (h) { return h.id === id; });
+    if (idx < 0) return null;
+    var removed = state.habits.splice(idx, 1)[0];
+    commit({ kind: 'habit', id: id, action: 'remove' });
+    return {
+      item: removed,
+      undo: function () {
+        state.habits.splice(Math.min(idx, state.habits.length), 0, removed);
+        commit({ kind: 'habit', id: id, action: 'add' });
+      },
+    };
+  }
+
+  /** Marca o desmarca un día (por defecto, hoy). Devuelve el nuevo estado. */
+  function toggleHabit(id, day) {
+    var h = habit(id);
+    if (!h) return null;
+    day = day || dayStr(0);
+    if (h.log[day]) delete h.log[day];
+    else h.log[day] = true;
+    h.updatedAt = nowIso();
+    commit({ kind: 'habit', id: id, action: 'check' });
+    return !!h.log[day];
+  }
+
+  function habitDue(h, s) {
+    var d = parseDayStr(s);
+    return !!d && h.days.indexOf(d.getDay()) >= 0;
+  }
+
+  /** Racha actual, mejor racha y cumplimiento de los últimos 30 días. */
+  function habitStats(id) {
+    var h = habit(id);
+    if (!h) return null;
+    var today = dayStr(0);
+    var created = String(h.createdAt || '').slice(0, 10);
+    var keys = Object.keys(h.log).filter(function (k) { return h.log[k]; }).sort();
+    var start = keys[0] && keys[0] < created ? keys[0] : created || today;
+
+    // Racha actual: hacia atrás desde hoy (hoy sin marcar todavía no la rompe).
+    var streak = 0;
+    var d = today;
+    if (!h.log[d]) d = addDays(d, -1);
+    var guard = 0;
+    while (d >= start && guard++ < 3660) {
+      if (habitDue(h, d)) {
+        if (h.log[d]) streak++;
+        else break;
+      }
+      d = addDays(d, -1);
+    }
+
+    // Mejor racha.
+    var best = 0;
+    var run = 0;
+    d = start;
+    guard = 0;
+    while (d <= today && guard++ < 3660) {
+      if (habitDue(h, d)) {
+        if (h.log[d]) { run++; best = Math.max(best, run); }
+        else if (d !== today) run = 0;
+      }
+      d = addDays(d, 1);
+    }
+
+    // Últimos 30 días (desde que existe el hábito).
+    var due = 0;
+    var done = 0;
+    for (var i = 0; i < 30; i++) {
+      var s = addDays(today, -i);
+      if (s < start) break;
+      if (!habitDue(h, s)) continue;
+      if (s === today && !h.log[s]) continue;
+      due++;
+      if (h.log[s]) done++;
+    }
+    return { streak: streak, best: best, rate: due ? Math.round((done / due) * 100) : null, doneToday: !!h.log[today], dueToday: habitDue(h, today) };
+  }
+
+  /* ------------------------------------------------------------------------
+     Sesiones de enfoque
+     ------------------------------------------------------------------------ */
+  function addFocus(data) {
+    var f = {
+      id: uid('f_'),
+      taskId: data.taskId || '',
+      minutes: Math.max(1, Math.round(data.minutes || 0)),
+      startedAt: data.startedAt || nowIso(),
+      endedAt: data.endedAt || nowIso(),
+    };
+    state.focus.push(f);
+    commit({ kind: 'focus', id: f.id, action: 'add' });
+    return f;
+  }
+
+  function focusSessions(filter) {
+    filter = filter || {};
+    return state.focus.filter(function (f) {
+      if (filter.taskId && f.taskId !== filter.taskId) return false;
+      if (filter.since && String(f.endedAt) < filter.since) return false;
+      return true;
+    }).sort(function (a, b) { return String(b.endedAt).localeCompare(String(a.endedAt)); });
+  }
+
+  /** Minutos de enfoque por día local (AAAA-MM-DD → minutos). */
+  function focusByDay() {
+    var out = {};
+    state.focus.forEach(function (f) {
+      var k = toDayStr(new Date(f.endedAt));
+      out[k] = (out[k] || 0) + f.minutes;
+    });
+    return out;
+  }
+
+  /* ------------------------------------------------------------------------
      Respaldo
      ------------------------------------------------------------------------ */
   function exportJSON() {
@@ -430,16 +657,20 @@
   function importJSON(text) {
     var parsed = JSON.parse(text);
     var data = normalize(parsed && parsed.data ? parsed.data : parsed);
-    if (!data || (!data.projects.length && !data.tasks.length && !data.notes.length)) {
+    if (!data || (!data.projects.length && !data.tasks.length && !data.notes.length && !data.habits.length)) {
       throw new Error('El archivo no contiene proyectos, tareas ni notas de DataP.');
     }
     var ok = function (x) { return x && typeof x.id === 'string'; };
-    if (!data.projects.every(ok) || !data.tasks.every(ok) || !data.notes.every(ok)) {
+    if (!data.projects.every(ok) || !data.tasks.every(ok) || !data.notes.every(ok) || !data.habits.every(ok)) {
       throw new Error('El archivo tiene elementos sin identificador; no parece un respaldo de DataP.');
     }
     state = data;
     commit({ kind: 'all' });
-    return { projects: data.projects.length, tasks: data.tasks.length, notes: data.notes.length };
+    data.habits.forEach(function (h) {
+      if (!h.log || typeof h.log !== 'object') h.log = {};
+      if (!Array.isArray(h.days) || !h.days.length) h.days = [0, 1, 2, 3, 4, 5, 6];
+    });
+    return { projects: data.projects.length, tasks: data.tasks.length, notes: data.notes.length, habits: data.habits.length };
   }
 
   function reset() {
@@ -461,6 +692,7 @@
     PRIORITIES: PRIORITIES,
     PROJECT_STATUSES: PROJECT_STATUSES,
     COLORS: COLORS,
+    REPEATS: REPEATS,
     isPersistent: function () { return persistent; },
     subscribe: subscribe,
     snapshot: function () { return clone(state); },
@@ -482,10 +714,24 @@
     addNote: addNote,
     updateNote: updateNote,
     removeNote: removeNote,
+    habits: habits,
+    habit: habit,
+    addHabit: addHabit,
+    updateHabit: updateHabit,
+    removeHabit: removeHabit,
+    toggleHabit: toggleHabit,
+    habitStats: habitStats,
+    habitDue: habitDue,
+    addFocus: addFocus,
+    focusSessions: focusSessions,
+    focusByDay: focusByDay,
     exportJSON: exportJSON,
     importJSON: importJSON,
     reset: reset,
     today: function () { return dayStr(0); },
     dayStr: dayStr,
+    addDays: addDays,
+    toDayStr: toDayStr,
+    nextDue: nextDue,
   };
 })();

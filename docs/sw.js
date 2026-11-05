@@ -4,7 +4,7 @@
    hay conexión, usa la copia guardada. Así la app funciona sin internet sin
    quedarse con versiones viejas.
    ========================================================================== */
-var CACHE = 'datap-v2';
+var CACHE = 'datap-v3';
 var SHELL = [
   './',
   'index.html',
@@ -14,13 +14,17 @@ var SHELL = [
   'assets/js/app.js',
   'assets/js/store.js',
   'assets/js/ui.js',
+  'assets/js/focus.js',
   'assets/js/lib/pca.js',
   'assets/js/lib/file-reader.js',
   'assets/js/lib/charts.js',
   'assets/data/pca-clientes.js',
   'assets/js/modules/inicio.js',
   'assets/js/modules/tareas.js',
+  'assets/js/modules/calendario.js',
   'assets/js/modules/notas.js',
+  'assets/js/modules/habitos.js',
+  'assets/js/modules/enfoque.js',
   'assets/js/modules/proyectos.js',
   'assets/js/modules/analisis-pca.js',
   'assets/js/modules/laboratorio.js',

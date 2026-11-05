@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>DataP</title>
-  <meta name="description" content="DataP: tu espacio para organizar proyectos, tareas, notas y análisis de datos.">
+  <meta name="description" content="DataP: tu espacio para organizar proyectos, tareas, calendario, notas, hábitos, enfoque y análisis de datos.">
   <meta name="theme-color" content="#2a78d6">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml">
@@ -40,6 +40,8 @@
         <span data-icon="search"></span><span>Buscar o crear…</span><kbd class="kbd" data-kbd-mod>Ctrl K</kbd>
       </button>
 
+      <a class="focus-pill" href="#/enfoque" data-focus-pill hidden><span data-icon="timer"></span><span class="fp-label">Enfoque</span><span class="fp-time" data-focus-time>25:00</span></a>
+
       <nav class="nav" id="nav"></nav>
 
       <div class="sidebar-footer">
@@ -61,6 +63,7 @@
           <span class="brand-text"><span class="brand-name">DataP</span></span>
         </a>
         <span class="spacer"></span>
+        <a class="focus-pill is-compact" href="#/enfoque" data-focus-pill hidden><span data-icon="timer"></span><span class="fp-time" data-focus-time>25:00</span></a>
         <button type="button" class="icon-btn" data-action="search" aria-label="Buscar"><span data-icon="search"></span></button>
         <button type="button" class="icon-btn" data-action="new-task" aria-label="Nueva tarea"><span data-icon="plus"></span></button>
       </header>
@@ -77,6 +80,7 @@
   <script src="assets/js/app.js"></script>
   <script src="assets/js/store.js"></script>
   <script src="assets/js/ui.js"></script>
+  <script src="assets/js/focus.js"></script>
 
   <!-- Librerías propias (sin dependencias externas) -->
   <script src="assets/js/lib/pca.js"></script>
@@ -89,7 +93,10 @@
   <!-- Módulos (cada uno se registra solo en el menú) -->
   <script src="assets/js/modules/inicio.js"></script>
   <script src="assets/js/modules/tareas.js"></script>
+  <script src="assets/js/modules/calendario.js"></script>
   <script src="assets/js/modules/notas.js"></script>
+  <script src="assets/js/modules/habitos.js"></script>
+  <script src="assets/js/modules/enfoque.js"></script>
   <script src="assets/js/modules/proyectos.js"></script>
   <script src="assets/js/modules/analisis-pca.js"></script>
   <script src="assets/js/modules/laboratorio.js"></script>

@@ -26,8 +26,9 @@
       { name: 'index.html', type: 'file', desc: 'Punto de entrada' },
       { name: 'manifest.webmanifest · sw.js', type: 'file', desc: 'App instalable y sin conexión' },
       { name: 'assets/js/app.js', type: 'file', desc: 'Núcleo: menú, rutas, tema' },
-      { name: 'assets/js/store.js', type: 'file', desc: 'Proyectos, tareas y notas' },
-      { name: 'assets/js/ui.js', type: 'file', desc: 'Diálogos, avisos, buscador' },
+      { name: 'assets/js/store.js', type: 'file', desc: 'Proyectos, tareas, notas, hábitos y enfoque' },
+      { name: 'assets/js/ui.js', type: 'file', desc: 'Diálogos, avisos, buscador, captura inteligente' },
+      { name: 'assets/js/focus.js', type: 'file', desc: 'Temporizador de enfoque' },
       { name: 'assets/js/modules/', type: 'folder', desc: 'Una página por archivo' },
       { name: 'assets/js/lib/', type: 'folder', desc: 'PCA, Excel/CSV y gráficos' },
       { name: 'assets/data/', type: 'folder', desc: 'Resultados de los notebooks' },
@@ -74,12 +75,12 @@
           '<section class="card" style="margin-top:16px"><h2 class="card-title">Tus datos</h2>' +
             (S.isPersistent() ? '' : '<div class="callout callout-warn" style="margin-top:12px">' + icon('alert') + '<div>Este navegador no permite guardar datos. Exporta un respaldo antes de cerrar la pestaña.</div></div>') +
             '<div class="settings-row"><div class="txt"><strong>Dónde se guardan</strong><span>En este navegador, en este dispositivo. No se envían a ningún servidor: ' +
-              snap.projects.length + ' proyectos, ' + snap.tasks.length + ' tareas y ' + snap.notes.length + ' notas.</span></div></div>' +
+              snap.projects.length + ' proyectos, ' + snap.tasks.length + ' tareas, ' + snap.notes.length + ' notas, ' + snap.habits.length + ' hábitos y ' + snap.focus.length + ' bloques de enfoque.</span></div></div>' +
             '<div class="settings-row"><div class="txt"><strong>Exportar respaldo</strong><span>Descarga un archivo .json con todo. Úsalo para pasar tus datos a otro equipo.</span></div>' +
               '<button type="button" class="btn" data-export>' + icon('download') + 'Exportar</button></div>' +
             '<div class="settings-row"><div class="txt"><strong>Importar respaldo</strong><span>Reemplaza los datos actuales por los del archivo.</span></div>' +
               '<button type="button" class="btn" data-import>' + icon('upload') + 'Importar…</button><input type="file" id="import-file" accept=".json,application/json" hidden></div>' +
-            '<div class="settings-row"><div class="txt"><strong>Restablecer</strong><span>Borra todo y vuelve a los proyectos, tareas y notas iniciales.</span></div>' +
+            '<div class="settings-row"><div class="txt"><strong>Restablecer</strong><span>Borra todo y vuelve a los datos iniciales.</span></div>' +
               '<button type="button" class="btn" data-reset style="color:var(--critical)">' + icon('trash') + 'Restablecer</button></div>' +
           '</section>' +
 
@@ -88,10 +89,23 @@
               (installPrompt ? '<button type="button" class="btn btn-primary" data-install>' + icon('phone') + 'Instalar</button>' : '') + '</div>' +
           '</section>' +
 
+          '<section class="card" style="margin-top:16px"><h2 class="card-title">Captura inteligente</h2>' +
+            '<p class="card-sub">Al escribir una tarea, DataP entiende la fecha, la prioridad, el proyecto y la repetición, y los quita del título.</p>' +
+            '<div class="shortcuts" style="margin-top:12px">' +
+              '<span><code>hoy</code> · <code>mañana</code> · <code>pasado mañana</code></span><span>Fecha relativa</span>' +
+              '<span><code>el viernes</code> · <code>el 15</code> · <code>15/12</code> · <code>24 de diciembre</code></span><span>Día concreto</span>' +
+              '<span><code>en 3 días</code> · <code>la próxima semana</code> · <code>fin de semana</code></span><span>Más adelante</span>' +
+              '<span><code>!alta</code> · <code>!media</code> · <code>!baja</code> (o <code>!!!</code>, <code>!!</code>)</span><span>Prioridad</span>' +
+              '<span><code>#datap</code></span><span>Proyecto (id o parte del nombre)</span>' +
+              '<span><code>cada día</code> · <code>cada lunes</code> · <code>entre semana</code> · <code>cada mes</code></span><span>Se repite al completarla</span>' +
+            '</div>' +
+          '</section>' +
+
           '<section class="card" style="margin-top:16px"><h2 class="card-title">Atajos de teclado</h2>' +
             '<div class="shortcuts" style="margin-top:12px">' +
               '<span><kbd class="kbd">' + mod + '</kbd> <kbd class="kbd">K</kbd></span><span>Buscar, ir a cualquier sitio o crear</span>' +
               '<span><kbd class="kbd">/</kbd></span><span>Abrir el buscador</span>' +
+              '<span><kbd class="kbd">N</kbd></span><span>Nueva tarea</span>' +
               '<span><kbd class="kbd">Enter</kbd></span><span>En el tablero, abrir la tarea seleccionada</span>' +
               '<span><kbd class="kbd">Alt</kbd> <kbd class="kbd">←</kbd> <kbd class="kbd">→</kbd></span><span>En el tablero, mover la tarea de columna</span>' +
               '<span><kbd class="kbd">Esc</kbd></span><span>Cerrar diálogos y el menú</span>' +
@@ -114,7 +128,7 @@
               .then(function (ok) {
                 if (!ok) return;
                 var r = S.importJSON(text);
-                UI.toast('Importado: ' + r.projects + ' proyectos, ' + r.tasks + ' tareas y ' + r.notes + ' notas');
+                UI.toast('Importado: ' + r.projects + ' proyectos, ' + r.tasks + ' tareas, ' + r.notes + ' notas y ' + r.habits + ' hábitos');
               });
           }).catch(function (err) {
             UI.toast('No se pudo importar: ' + (err.message || 'archivo inválido'), { timeout: 6000 });
@@ -125,7 +139,7 @@
         if (e.target.closest('[data-export]')) UI.exportBackup();
         else if (e.target.closest('[data-import]')) root.querySelector('#import-file').click();
         else if (e.target.closest('[data-reset]')) {
-          UI.confirm({ title: 'Restablecer datos', message: 'Se borrarán todos tus proyectos, tareas y notas de este navegador. Te recomendamos exportar un respaldo antes.', confirmLabel: 'Borrar y restablecer', danger: true })
+          UI.confirm({ title: 'Restablecer datos', message: 'Se borrarán todos tus proyectos, tareas, notas, hábitos y registros de enfoque de este navegador. Te recomendamos exportar un respaldo antes.', confirmLabel: 'Borrar y restablecer', danger: true })
             .then(function (ok) { if (ok) { S.reset(); UI.toast('Datos restablecidos'); } });
         } else if (e.target.closest('[data-install]') && installPrompt) {
           installPrompt.prompt();

@@ -59,6 +59,220 @@
     return s.charAt(0).toUpperCase() + s.slice(1);
   }
 
+
+  /* ------------------------------------------------------------------------
+     Captura inteligente: entiende fecha, prioridad, proyecto y repetición
+     escritos en el título. Ej.: "Llamar a Ana el viernes !alta #datap"
+     ------------------------------------------------------------------------ */
+  var WEEKDAY_RE = ['domingo', 'lunes', 'martes', 'mi[eé]rcoles', 'jueves', 'viernes', 's[aá]bado'];
+  var MONTHS = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  var MONTH_RE = '(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre|ene|feb|mar|abr|may|jun|jul|ago|sept?|oct|nov|dic)\\.?';
+  var NUM_WORDS = { un: 1, una: 1, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, quince: 15 };
+  var END = '(?=$|[\\s.,;:!?])';
+  var START = '(^|\\s)';
+
+  function dayOf(d) { return S.toDayStr(d); }
+  function todayDate() { var t = new Date(); t.setHours(0, 0, 0, 0); return t; }
+  function nextWeekday(wd, allowToday) {
+    var d = todayDate();
+    var diff = (wd - d.getDay() + 7) % 7;
+    if (diff === 0 && !allowToday) diff = 7;
+    d.setDate(d.getDate() + diff);
+    return dayOf(d);
+  }
+  function monthIndex(word) {
+    var w = norm(word).replace('.', '').slice(0, 3);
+    if (w === 'set') w = 'sep';
+    return MONTHS.indexOf(w);
+  }
+  function validDate(y, m, d) {
+    var dt = new Date(y, m, d);
+    return dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === d ? dt : null;
+  }
+  /** Fecha sin año: este año, o el siguiente si ya pasó. */
+  function upcoming(m, d) {
+    var t = todayDate();
+    var dt = validDate(t.getFullYear(), m, d);
+    if (dt && dt < t) dt = validDate(t.getFullYear() + 1, m, d);
+    return dt ? dayOf(dt) : null;
+  }
+
+  function parseQuick(text) {
+    var src = String(text || '');
+    var out = { title: src.trim(), due: '', priority: '', projectId: '', repeat: '', found: [] };
+    var work = src;
+
+    function take(re, fn) {
+      var m = re.exec(work);
+      if (!m) return false;
+      var res = fn(m);
+      if (res === false) return false;
+      work = work.slice(0, m.index) + (m[1] && /\s/.test(m[1]) ? ' ' : '') + work.slice(m.index + m[0].length);
+      return true;
+    }
+
+    // Repetición
+    var wdAlt = WEEKDAY_RE.join('|');
+    take(new RegExp(START + '(cada|todos los)\\s+(' + wdAlt + ')' + END, 'i'), function (m) {
+      var wd = WEEKDAY_RE.findIndex(function (r) { return new RegExp('^' + r + '$', 'i').test(m[3]); });
+      out.repeat = 'weekly';
+      out.due = nextWeekday(wd, true);
+    }) ||
+    take(new RegExp(START + '((de\\s+)?lunes\\s+a\\s+viernes|entre\\s+semana|(los\\s+)?d[ií]as\\s+(laborables|h[aá]biles))' + END, 'i'), function () { out.repeat = 'weekdays'; }) ||
+    take(new RegExp(START + '(cada\\s+d[ií]a|todos\\s+los\\s+d[ií]as|a\\s+diario|diariamente)' + END, 'i'), function () { out.repeat = 'daily'; }) ||
+    take(new RegExp(START + '(cada\\s+semana|todas\\s+las\\s+semanas|semanalmente)' + END, 'i'), function () { out.repeat = 'weekly'; }) ||
+    take(new RegExp(START + '(cada\\s+mes|todos\\s+los\\s+meses|mensualmente)' + END, 'i'), function () { out.repeat = 'monthly'; });
+
+    // Fecha
+    var pre = '((?:para|antes\\s+del?|hasta\\s+el|el|este|esta|la)\\s+)?';
+    if (!out.due) {
+      take(new RegExp(START + pre + 'pasado\\s+ma[nñ]ana' + END, 'i'), function () { out.due = S.dayStr(2); }) ||
+      take(new RegExp(START + '((?:para|desde)\\s+)?(hoy|esta\\s+noche|esta\\s+tarde)' + END, 'i'), function () { out.due = S.dayStr(0); }) ||
+      take(new RegExp(START + '((?:para|desde)\\s+)?ma[nñ]ana' + END, 'i'), function (m) {
+        // "por la mañana" / "de la mañana" no es una fecha.
+        if (/(la|por|de)\s*$/i.test(work.slice(0, m.index + m[1].length))) return false;
+        out.due = S.dayStr(1);
+      }) ||
+      take(new RegExp(START + '((?:para|en|dentro\\s+de)\\s+)?(?:la\\s+)?(pr[oó]xima\\s+semana|semana\\s+que\\s+viene)' + END, 'i'), function () { out.due = nextWeekday(1, false); }) ||
+      take(new RegExp(START + pre + '(?:este\\s+)?fin\\s+de\\s+semana' + END, 'i'), function () {
+        var wd = todayDate().getDay();
+        out.due = wd === 0 ? S.dayStr(0) : nextWeekday(6, true);
+      }) ||
+      take(new RegExp(START + '(?:en|dentro\\s+de)\\s+(\\d{1,3}|' + Object.keys(NUM_WORDS).join('|') + ')\\s+(d[ií]as?|semanas?|mes(?:es)?)' + END, 'i'), function (m) {
+        var n = /^\d+$/.test(m[2]) ? +m[2] : NUM_WORDS[m[2].toLowerCase()];
+        var unit = norm(m[3]);
+        if (unit.indexOf('semana') === 0) out.due = S.dayStr(n * 7);
+        else if (unit.indexOf('mes') === 0) {
+          var d = todayDate(); d.setMonth(d.getMonth() + n); out.due = dayOf(d);
+        } else out.due = S.dayStr(n);
+      }) ||
+      take(new RegExp(START + pre + '(?:(?:el|la)\\s+)?(pr[oó]xim[oa]\\s+)?(' + wdAlt + ')' + END, 'i'), function (m) {
+        var wd = WEEKDAY_RE.findIndex(function (r) { return new RegExp('^' + r + '$', 'i').test(m[4]); });
+        out.due = nextWeekday(wd, false);
+      }) ||
+      take(new RegExp(START + pre + '(\\d{1,2})([/.-])(\\d{1,2})(?:\\4(\\d{2}|\\d{4}))?' + END, 'i'), function (m) {
+        // "1.5" o "1-5" solo cuentan como fecha con "el"/"para" delante (p. ej. versiones o rangos).
+        if (m[4] !== '/' && !m[2]) return false;
+        var d = +m[3], mo = +m[5] - 1;
+        if (m[6]) {
+          var y = +m[6]; if (y < 100) y += 2000;
+          var dt = validDate(y, mo, d);
+          if (!dt) return false;
+          out.due = dayOf(dt);
+        } else {
+          var u = upcoming(mo, d);
+          if (!u) return false;
+          out.due = u;
+        }
+      }) ||
+      take(new RegExp(START + pre + '(\\d{1,2})\\s+(?:de\\s+)?' + MONTH_RE + '(?:\\s+(?:de\\s+)?(\\d{4}))?' + END, 'i'), function (m) {
+        var mo = monthIndex(m[4]);
+        if (mo < 0) return false;
+        if (m[5]) {
+          var dt = validDate(+m[5], mo, +m[3]);
+          if (!dt) return false;
+          out.due = dayOf(dt);
+        } else {
+          var u = upcoming(mo, +m[3]);
+          if (!u) return false;
+          out.due = u;
+        }
+      }) ||
+      take(new RegExp(START + '((?:para\\s+)?el\\s+(?:d[ií]a\\s+)?|(?:para\\s+)?d[ií]a\\s+)(\\d{1,2})' + END, 'i'), function (m) {
+        var d = +m[3];
+        if (d < 1 || d > 31) return false;
+        var t = todayDate();
+        var dt = validDate(t.getFullYear(), t.getMonth(), d);
+        var guard = 0;
+        var y = t.getFullYear(), mo = t.getMonth();
+        while ((!dt || dt < t) && guard++ < 12) {
+          mo++; if (mo > 11) { mo = 0; y++; }
+          dt = validDate(y, mo, d);
+        }
+        if (!dt) return false;
+        out.due = dayOf(dt);
+      });
+    }
+
+    // Prioridad
+    take(new RegExp(START + '(!{3}|!(?:alta|a|1|urgente))' + END, 'i'), function () { out.priority = 'alta'; }) ||
+    take(new RegExp(START + '(!{2}|!(?:media|m|2))' + END, 'i'), function () { out.priority = 'media'; }) ||
+    take(new RegExp(START + '(!(?:baja|b|3))' + END, 'i'), function () { out.priority = 'baja'; });
+
+    // Proyecto: #id o #parte-del-nombre
+    take(/(^|\s)#([^\s#]+)(?=$|\s)/, function (m) {
+      var q = norm(m[2]).replace(/[-_]+/g, ' ').trim();
+      if (!q) return false;
+      var list = S.projects();
+      var hit = list.filter(function (p) { return norm(p.id) === norm(m[2]); })[0] ||
+        list.filter(function (p) { return norm(p.name).indexOf(q) === 0; })[0] ||
+        list.filter(function (p) { return norm(p.name).indexOf(q) >= 0; })[0];
+      if (!hit) return false;
+      out.projectId = hit.id;
+    });
+
+    var title = work.replace(/\s+/g, ' ').replace(/\s+([.,;:])/g, '$1').trim().replace(/^[,;:\-–]+\s*|\s*[,;:\-–]+$/g, '');
+    if (title) {
+      // Si la frase empezaba con mayúscula, el título también.
+      var first = src.trim().charAt(0);
+      if (first && first === first.toUpperCase() && first !== first.toLowerCase()) title = title.charAt(0).toUpperCase() + title.slice(1);
+      out.title = title;
+    }
+    if (out.due) out.found.push('due');
+    if (out.priority) out.found.push('priority');
+    if (out.projectId) out.found.push('project');
+    if (out.repeat) out.found.push('repeat');
+    return out;
+  }
+
+  var dtWeekday = new Intl.DateTimeFormat('es', { weekday: 'short', day: 'numeric', month: 'short' });
+  function dayLabel(s) {
+    var n = daysFromToday(s);
+    if (n === 0) return 'Hoy';
+    if (n === 1) return 'Mañana';
+    var t = dtWeekday.format(parseDay(s)).replace(/\./g, '');
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+
+  /** Chips con lo que entendió la captura inteligente. */
+  function smartHint(parsed) {
+    if (!parsed || !parsed.found.length) return '';
+    var chips = [];
+    if (parsed.due) chips.push('<span class="sh-chip">' + icon('calendar') + esc(dayLabel(parsed.due)) + '</span>');
+    if (parsed.repeat) chips.push('<span class="sh-chip">' + icon('repeat') + esc(label(S.REPEATS, parsed.repeat)) + '</span>');
+    if (parsed.priority) chips.push(priorityBadge(parsed.priority));
+    if (parsed.projectId) chips.push(projectTag(S.project(parsed.projectId)));
+    return '<span class="sh-label">Se guardará:</span>' + chips.join('');
+  }
+
+  /** Une lo escrito con los valores por defecto del contexto (proyecto, fecha…). */
+  function quickTaskData(text, defaults) {
+    var p = parseQuick(text);
+    var d = Object.assign({}, defaults || {});
+    d.title = p.title;
+    if (p.due) d.due = p.due;
+    if (p.priority) d.priority = p.priority;
+    if (p.projectId) d.projectId = p.projectId;
+    if (p.repeat) d.repeat = p.repeat;
+    return d;
+  }
+
+  // Vista previa en vivo en cualquier campo con data-smart.
+  document.addEventListener('input', function (e) {
+    var el = e.target;
+    if (!el || !el.hasAttribute || !el.hasAttribute('data-smart')) return;
+    var host = el.closest('form') || el.parentNode;
+    var hint = host && host.querySelector('.smart-hint');
+    if (!hint) return;
+    var html = el.value.trim() ? smartHint(parseQuick(el.value)) : '';
+    hint.innerHTML = html;
+    hint.hidden = !html;
+  });
+
+  function smartHintSlot() {
+    return '<div class="smart-hint" aria-live="polite" hidden></div>';
+  }
+
   /* ------------------------------------------------------------------------
      Etiquetas
      ------------------------------------------------------------------------ */
@@ -91,6 +305,17 @@
     if (!d) return '';
     var ico = d.state === 'overdue' ? 'alert' : 'calendar';
     return '<span class="due due-' + d.state + '">' + icon(ico) + esc(d.label) + '</span>';
+  }
+
+  function repeatBadge(r) {
+    return '<span class="meta-chip" title="Se repite: ' + esc(label(S.REPEATS, r).toLowerCase()) + '">' + icon('repeat') + '<span class="visually-hidden">Se repite: </span>' + esc(label(S.REPEATS, r)) + '</span>';
+  }
+
+  function subtaskBadge(t) {
+    var list = t.subtasks || [];
+    if (!list.length) return '';
+    var n = list.filter(function (x) { return x.done; }).length;
+    return '<span class="meta-chip' + (n === list.length ? ' is-complete' : '') + '" title="Subtareas hechas">' + icon('list-check') + n + '/' + list.length + '</span>';
   }
 
   function statusBadge(st) {
@@ -244,6 +469,16 @@
     var form = dlg.querySelector('form');
 
     dlg.querySelector('.dlg-close').addEventListener('click', function () { dlg.close('cancel'); });
+    // Enter en un campo envía con la acción principal (nunca con "Eliminar",
+    // que es el primer botón del formulario).
+    form.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || e.defaultPrevented || e.isComposing) return;
+      var el = e.target;
+      if (el.tagName !== 'INPUT' || /^(button|submit|reset|file)$/.test(el.type)) return;
+      e.preventDefault();
+      var primary = form.querySelector('.dlg-foot .btn-primary, .dlg-foot .btn-danger');
+      if (primary) form.requestSubmit(primary);
+    });
     dlg.addEventListener('click', function (e) { if (e.target === dlg) dlg.close('cancel'); });
     form.addEventListener('submit', function (e) {
       var value = e.submitter ? e.submitter.value : 'save';
@@ -296,27 +531,49 @@
       }).join('');
   }
 
+  function subtaskItem(st) {
+    return '<li class="st-item" data-st="' + esc(st.id || '') + '">' +
+      '<input type="checkbox" class="st-check" aria-label="Hecha"' + (st.done ? ' checked' : '') + '>' +
+      '<input class="st-title" value="' + esc(st.title) + '" aria-label="Subtarea" maxlength="200" data-st-enter>' +
+      '<button type="button" class="icon-btn st-del" data-st-del aria-label="Quitar subtarea">' + icon('close') + '</button></li>';
+  }
+
+  function fmtMinutes(min) {
+    if (!min) return '0 min';
+    var h = Math.floor(min / 60);
+    var m = min % 60;
+    return h ? h + ' h' + (m ? ' ' + m + ' min' : '') : m + ' min';
+  }
+
   function taskDialog(taskId, defaults) {
     var t = taskId ? S.task(taskId) : null;
-    var d = Object.assign({ title: '', description: '', status: 'todo', priority: 'media', due: '', projectId: '' }, defaults || {}, t || {});
+    var d = Object.assign({ title: '', description: '', status: 'todo', priority: 'media', due: '', projectId: '', repeat: '', subtasks: [] }, defaults || {}, t || {});
     var actions = [];
     if (t) actions.push({ value: 'delete', label: 'Eliminar', kind: 'ghost', align: 'start', icon: 'trash' });
+    if (t && t.status !== 'done' && DataP.focus) actions.push({ value: 'focus', label: 'Enfocarme', align: 'start', icon: 'timer' });
     actions.push({ value: 'cancel', label: 'Cancelar' });
     actions.push({ value: 'save', label: t ? 'Guardar' : 'Crear tarea', kind: 'primary' });
+    var focusMin = t ? S.focusSessions({ taskId: t.id }).reduce(function (a, f) { return a + f.minutes; }, 0) : 0;
 
-    dialog({
+    var dlg = dialog({
       title: t ? 'Editar tarea' : 'Nueva tarea',
       body:
-        '<label class="fld"><span class="fld-label">Título</span><input class="input" name="title" required maxlength="200" autocomplete="off" value="' + esc(d.title) + '" autofocus></label>' +
+        '<label class="fld"><span class="fld-label">Título</span><input class="input" name="title" required maxlength="200" autocomplete="off" value="' + esc(d.title) + '" autofocus' + (t ? '' : ' data-smart placeholder="Ej.: Enviar informe el viernes !alta #proyecto"') + '>' + (t ? '' : smartHintSlot()) + '</label>' +
         '<label class="fld"><span class="fld-label">Descripción <span class="fld-opt">opcional</span></span><textarea class="input" name="description" rows="3">' + esc(d.description) + '</textarea></label>' +
+        '<fieldset class="fld"><legend class="fld-label">Subtareas <span class="fld-opt">opcional</span></legend>' +
+          '<ul class="st-list" data-st-list>' + (d.subtasks || []).map(subtaskItem).join('') + '</ul>' +
+          '<div class="st-add">' + icon('plus') + '<input class="st-new" data-st-new placeholder="Añadir subtarea y pulsar Enter" maxlength="200" aria-label="Nueva subtarea"></div>' +
+        '</fieldset>' +
         '<div class="fld-row">' +
           '<label class="fld"><span class="fld-label">Estado</span><select class="input" name="status">' + options(S.TASK_STATUSES, d.status) + '</select></label>' +
           '<label class="fld"><span class="fld-label">Prioridad</span><select class="input" name="priority">' + options(S.PRIORITIES, d.priority) + '</select></label>' +
         '</div>' +
         '<div class="fld-row">' +
           '<label class="fld"><span class="fld-label">Fecha límite <span class="fld-opt">opcional</span></span><input class="input" type="date" name="due" value="' + esc(d.due) + '"></label>' +
-          '<label class="fld"><span class="fld-label">Proyecto</span><select class="input" name="projectId">' + projectOptions(d.projectId) + '</select></label>' +
-        '</div>',
+          '<label class="fld"><span class="fld-label">Repetir</span><select class="input" name="repeat">' + options(S.REPEATS, d.repeat || '') + '</select></label>' +
+        '</div>' +
+        '<label class="fld"><span class="fld-label">Proyecto</span><select class="input" name="projectId">' + projectOptions(d.projectId) + '</select></label>' +
+        (t && focusMin ? '<p class="fld-note">' + icon('timer') + 'Tiempo de enfoque en esta tarea: <strong>' + esc(fmtMinutes(focusMin)) + '</strong></p>' : ''),
       actions: actions,
       onAction: function (value, form) {
         if (value === 'delete') {
@@ -324,24 +581,68 @@
           toast('Tarea eliminada', { action: { label: 'Deshacer', run: r.undo } });
           return;
         }
+        if (value === 'focus') {
+          DataP.focus.start({ taskId: t.id });
+          DataP.navigate('enfoque');
+          return;
+        }
+        var subtasks = Array.prototype.map.call(form.querySelectorAll('.st-item'), function (li) {
+          return { id: li.getAttribute('data-st') || undefined, title: li.querySelector('.st-title').value, done: li.querySelector('.st-check').checked };
+        });
+        var pending = form.querySelector('[data-st-new]').value.trim();
+        if (pending) subtasks.push({ title: pending, done: false });
         var data = {
           title: form.title.value.trim(),
           description: form.description.value.trim(),
           status: form.status.value,
           priority: form.priority.value,
           due: form.due.value,
+          repeat: form.repeat.value,
           projectId: form.projectId.value,
+          subtasks: subtasks,
         };
         if (!data.title) { form.title.focus(); return false; }
         if (t) {
           S.updateTask(t.id, data);
           toast('Tarea guardada');
         } else {
+          // Captura inteligente en el título: solo rellena lo que no se cambió a mano.
+          var parsed = parseQuick(data.title);
+          if (parsed.found.length) {
+            data.title = parsed.title;
+            if (parsed.due && !data.due) data.due = parsed.due;
+            if (parsed.priority && data.priority === (d.priority || 'media')) data.priority = parsed.priority;
+            if (parsed.projectId && !data.projectId) data.projectId = parsed.projectId;
+            if (parsed.repeat && !data.repeat) data.repeat = parsed.repeat;
+          }
+          if (data.repeat && !data.due) data.due = S.dayStr(0);
           S.addTask(data);
           toast('Tarea creada', { action: { label: 'Ver tablero', run: function () { DataP.navigate('tareas'); } } });
         }
       },
     });
+
+    // Subtareas: Enter añade, la cruz quita.
+    var list = dlg.querySelector('[data-st-list]');
+    var add = dlg.querySelector('[data-st-new]');
+    dlg.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || e.isComposing) return;
+      if (e.target === add) {
+        e.preventDefault();
+        var v = add.value.trim();
+        if (!v) return;
+        list.insertAdjacentHTML('beforeend', subtaskItem({ title: v, done: false }));
+        add.value = '';
+      } else if (e.target.hasAttribute && e.target.hasAttribute('data-st-enter')) {
+        e.preventDefault();
+        add.focus();
+      }
+    }, true);
+    dlg.addEventListener('click', function (e) {
+      var del = e.target.closest('[data-st-del]');
+      if (del) { del.closest('.st-item').remove(); add.focus(); }
+    });
+    return dlg;
   }
 
   function projectDialog(projectId) {
@@ -427,6 +728,13 @@
     items.push({ group: 'Acciones', icon: 'plus', title: 'Nueva tarea', keys: 'crear agregar tarea pendiente', run: function () { taskDialog(null); } });
     items.push({ group: 'Acciones', icon: 'note', title: 'Nueva nota', keys: 'crear agregar nota apunte', run: function () { newNote(); } });
     items.push({ group: 'Acciones', icon: 'folder', title: 'Nuevo proyecto', keys: 'crear agregar proyecto', run: function () { projectDialog(null); } });
+    if (DataP.focus) {
+      items.push({ group: 'Acciones', icon: 'timer', title: DataP.focus.state().running ? 'Ver el temporizador de enfoque' : 'Iniciar enfoque (25 min)', keys: 'pomodoro temporizador concentrar enfoque foco', run: function () {
+        if (!DataP.focus.state().running) DataP.focus.start({});
+        DataP.navigate('enfoque');
+      } });
+    }
+    items.push({ group: 'Acciones', icon: 'flame', title: 'Nuevo hábito', keys: 'crear agregar habito rutina', run: function () { DataP.navigate('habitos'); setTimeout(function () { if (DataP.ui.habitDialog) DataP.ui.habitDialog(null); }, 0); } });
     items.push({ group: 'Acciones', icon: 'moon', title: 'Cambiar tema claro/oscuro', keys: 'tema oscuro claro modo apariencia', run: function () { DataP.toggleTheme(); } });
     items.push({ group: 'Acciones', icon: 'download', title: 'Exportar respaldo', keys: 'respaldo backup exportar json descargar', run: exportBackup });
     // Páginas
@@ -444,6 +752,13 @@
     S.tasks().forEach(function (t) {
       var p = S.project(t.projectId);
       items.push({ group: 'Tareas', icon: t.status === 'done' ? 'check-circle' : 'circle', title: t.title, sub: label(S.TASK_STATUSES, t.status) + (p ? ' · ' + p.name : ''), keys: t.description, done: t.status === 'done', run: function () { taskDialog(t.id); } });
+    });
+    S.habits().forEach(function (h) {
+      var st = S.habitStats(h.id);
+      items.push({ group: 'Hábitos', icon: st.doneToday ? 'check-circle' : 'flame', title: (st.doneToday ? 'Desmarcar hoy: ' : 'Marcar hoy: ') + h.name, sub: st.streak ? 'Racha de ' + st.streak + (st.streak === 1 ? ' día' : ' días') : 'Hábito', keys: 'habito marcar cumplir', run: function () {
+        var on = S.toggleHabit(h.id);
+        toast(on ? 'Hábito cumplido hoy' : 'Hábito desmarcado');
+      } });
     });
     S.notes().forEach(function (n) {
       items.push({ group: 'Notas', icon: 'note', title: n.title || 'Nota sin título', sub: plain(n.body).slice(0, 80), keys: n.body, run: goto('notas', n.id) });
@@ -499,8 +814,16 @@
       var res = [];
       groups.forEach(function (g) { res = res.concat(byGroup[g]); });
       // Captura rápida: crear con el texto escrito.
-      res.push({ group: 'Crear', icon: 'plus', title: 'Crear tarea: «' + q.trim() + '»', run: function () {
-        S.addTask({ title: q.trim() });
+      var qd = quickTaskData(q.trim());
+      var qp = parseQuick(q.trim());
+      var subBits = [];
+      if (qd.due) subBits.push(dayLabel(qd.due));
+      if (qd.repeat) subBits.push(label(S.REPEATS, qd.repeat));
+      if (qd.priority) subBits.push('Prioridad ' + label(S.PRIORITIES, qd.priority).toLowerCase());
+      if (qd.projectId && S.project(qd.projectId)) subBits.push(S.project(qd.projectId).name);
+      res.push({ group: 'Crear', icon: 'plus', title: 'Crear tarea: «' + (qp.found.length ? qd.title : q.trim()) + '»', sub: subBits.join(' · '), run: function () {
+        if (qd.repeat && !qd.due) qd.due = S.dayStr(0);
+        S.addTask(qd);
         toast('Tarea creada', { action: { label: 'Ver tablero', run: function () { DataP.navigate('tareas'); } } });
       } });
       res.push({ group: 'Crear', icon: 'note', title: 'Crear nota: «' + q.trim() + '»', run: function () { newNote({ title: q.trim() }); } });
@@ -572,6 +895,8 @@
       p ? projectTag(p) : '',
       t.status === 'doing' ? '<span class="pstatus ps-activo">En curso</span>' : '',
       dueBadge(t.due, done),
+      t.repeat ? repeatBadge(t.repeat) : '',
+      subtaskBadge(t),
       !done ? priorityBadge(t.priority) : '',
     ].filter(Boolean).join('');
     return '<li class="task-row' + (done ? ' is-done' : '') + '" data-id="' + esc(t.id) + '">' +
@@ -616,6 +941,14 @@
   }
 
   DataP.ui = {
+    parseQuick: parseQuick,
+    quickTaskData: quickTaskData,
+    smartHint: smartHint,
+    smartHintSlot: smartHintSlot,
+    dayLabel: dayLabel,
+    fmtMinutes: fmtMinutes,
+    repeatBadge: repeatBadge,
+    subtaskBadge: subtaskBadge,
     taskRow: taskRow,
     toggleWithToast: toggleWithToast,
     bindTaskList: bindTaskList,

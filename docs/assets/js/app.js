@@ -91,6 +91,16 @@
     spark: '<path d="M12 3.5 13.8 10l6.7 2-6.7 2L12 20.5 10.2 14l-6.7-2 6.7-2z"/>',
     phone: '<rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/>',
     keyboard: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/>',
+    repeat: '<path d="M17 3.5 20 6.5l-3 3"/><path d="M4 12v-1.5a4 4 0 0 1 4-4h12"/><path d="M7 20.5 4 17.5l3-3"/><path d="M20 12v1.5a4 4 0 0 1-4 4H4"/>',
+    flame: '<path d="M12 21a6.5 6.5 0 0 0 6.5-6.5c0-4.5-4-6.5-4.5-11-2.5 1.5-4 4-4 6.5-1-.5-2-1.8-2.2-3C6.2 9 5.5 11.5 5.5 14.5A6.5 6.5 0 0 0 12 21z"/><path d="M12 21a2.8 2.8 0 0 1-2.8-2.8c0-2 2.8-3.7 2.8-5.2 0 1.5 2.8 3.2 2.8 5.2A2.8 2.8 0 0 1 12 21z"/>',
+    timer: '<circle cx="12" cy="13.5" r="7.5"/><path d="M12 9.5v4l2.5 2M9.5 2.5h5M19 6.5l1.5-1.5"/>',
+    play: '<path d="M7.5 5.2v13.6a.8.8 0 0 0 1.2.7l10.8-6.8a.8.8 0 0 0 0-1.4L8.7 4.5a.8.8 0 0 0-1.2.7z"/>',
+    pause: '<rect x="6.5" y="5" width="3.6" height="14" rx="1"/><rect x="13.9" y="5" width="3.6" height="14" rx="1"/>',
+    skip: '<path d="M5.5 5.5v13l9-6.5z"/><path d="M18.5 5.5v13"/>',
+    reset: '<path d="M4 12a8 8 0 1 0 2.4-5.7"/><path d="M4 4.5v4h4"/>',
+    'chev-left': '<path d="m14.5 6-6 6 6 6"/>',
+    'chev-right': '<path d="m9.5 6 6 6-6 6"/>',
+    'list-check': '<path d="m3.5 6.5 1.8 1.8 3-3.3M3.5 15.5l1.8 1.8 3-3.3"/><path d="M11.5 7h9M11.5 16h9"/>',
   };
 
   function icon(name) {
@@ -407,6 +417,11 @@
       if (e.key === '/' && !isTyping(document.activeElement) && !document.querySelector('dialog[open]')) {
         e.preventDefault();
         DataP.ui.openPalette();
+        return;
+      }
+      if ((e.key === 'n' || e.key === 'N') && !e.ctrlKey && !e.metaKey && !e.altKey && !isTyping(document.activeElement) && !document.querySelector('dialog[open]')) {
+        e.preventDefault();
+        DataP.ui.taskDialog(null);
         return;
       }
       if (e.key === 'Escape' && sidebar.classList.contains('is-open')) {

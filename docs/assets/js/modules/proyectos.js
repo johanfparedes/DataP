@@ -107,8 +107,8 @@
           '<section class="card" aria-labelledby="h-ptasks">' +
             '<div class="card-head"><h2 class="card-title" id="h-ptasks">Tareas</h2><a class="link-more" href="#/tareas/' + encodeURIComponent(p.id) + '">Ver en el tablero</a></div>' +
             '<form class="quick-add" data-quick><label class="visually-hidden" for="ptask-quick">Nueva tarea en este proyecto</label>' +
-              '<input class="input" id="ptask-quick" name="title" placeholder="Añade una tarea a este proyecto" autocomplete="off" maxlength="200">' +
-              '<button class="btn" type="submit">' + icon('plus') + '<span class="visually-hidden">Añadir</span></button></form>' +
+              '<input class="input" id="ptask-quick" name="title" placeholder="Añade una tarea a este proyecto" autocomplete="off" maxlength="200" data-smart>' +
+              '<button class="btn" type="submit">' + icon('plus') + '<span class="visually-hidden">Añadir</span></button>' + UI.smartHintSlot() + '</form>' +
             (open.length ? '<ul class="task-list">' + open.map(function (t) { return UI.taskRow(t, { showProject: false }); }).join('') + '</ul>'
               : '<div class="empty">' + icon('check-circle') + 'No hay tareas pendientes.</div>') +
             (done.length ? '<details class="data-details"><summary>Hechas (' + done.length + ')</summary><ul class="task-list" style="margin-top:6px">' +
@@ -137,8 +137,10 @@
       var title = f.title.value.trim();
       if (!title) return;
       focusQuick = true;
-      S.addTask({ title: title, projectId: id });
-      UI.toast('Tarea creada');
+      var data = UI.quickTaskData(title, { projectId: id });
+      if (data.repeat && !data.due) data.due = S.dayStr(0);
+      S.addTask(data);
+      UI.toast(data.projectId !== id && S.project(data.projectId) ? 'Tarea creada en ' + S.project(data.projectId).name : 'Tarea creada');
     });
     root.addEventListener('click', function (e) {
       if (e.target.closest('[data-edit]')) UI.projectDialog(id);

@@ -54,7 +54,7 @@
         var done = t.status === 'done';
         var p = S.project(t.projectId);
         var next = t.status === 'todo' ? 'doing' : t.status === 'doing' ? 'done' : null;
-        var meta = [p ? UI.projectTag(p) : '', UI.dueBadge(t.due, done), !done ? UI.priorityBadge(t.priority) : ''].filter(Boolean).join('');
+        var meta = [p ? UI.projectTag(p) : '', UI.dueBadge(t.due, done), t.repeat ? UI.repeatBadge(t.repeat) : '', UI.subtaskBadge(t), !done ? UI.priorityBadge(t.priority) : ''].filter(Boolean).join('');
         return '<article class="tc' + (done ? ' is-done' : '') + '" draggable="true" tabindex="0" data-id="' + esc(t.id) + '" aria-label="' + esc(t.title) + '">' +
           '<button type="button" class="tcheck" data-toggle aria-pressed="' + done + '" aria-label="' + (done ? 'Marcar como pendiente' : 'Completar') + '">' + icon('check') + '</button>' +
           '<div class="tc-main"><span class="tc-title">' + esc(t.title) + '</span>' +
@@ -89,7 +89,7 @@
             '<div class="col-head"><span class="col-ico" aria-hidden="true"></span><h2 id="col-h-' + st.id + '" style="font-size:inherit">' + esc(st.label) + '</h2>' +
               '<span class="col-count">' + esc(countTxt) + '</span><span class="grow"></span>' +
               '<button type="button" class="icon-btn" data-add="' + st.id + '" aria-label="Nueva tarea en ' + esc(st.label) + '" title="Nueva tarea">' + icon('plus') + '</button></div>' +
-            (st.id === 'todo' ? '<form class="col-quick" data-quick><label class="visually-hidden" for="board-quick">Añadir tarea</label><input class="input" id="board-quick" name="title" placeholder="Añadir tarea y pulsar Enter" autocomplete="off" maxlength="200"></form>' : '') +
+            (st.id === 'todo' ? '<form class="col-quick" data-quick><label class="visually-hidden" for="board-quick">Añadir tarea</label><input class="input" id="board-quick" name="title" placeholder="Añadir tarea y pulsar Enter" autocomplete="off" maxlength="200" data-smart>' + UI.smartHintSlot() + '</form>' : '') +
             '<div class="col-body" data-drop="' + st.id + '">' +
               (list.length ? list.map(card).join('') : '<div class="col-empty">' + (anyFilter ? 'Sin coincidencias' : st.id === 'done' ? 'Arrastra aquí lo terminado' : 'Arrastra tareas aquí') + '</div>') +
             '</div></section>';
@@ -140,7 +140,9 @@
         var title = f.title.value.trim();
         if (!title) return;
         var projectId = filters.project && filters.project !== '__none' ? filters.project : '';
-        S.addTask({ title: title, status: 'todo', projectId: projectId });
+        var data = UI.quickTaskData(title, { status: 'todo', projectId: projectId });
+        if (data.repeat && !data.due) data.due = S.dayStr(0);
+        S.addTask(data);
       });
       root.addEventListener('click', function (e) {
         var t = e.target;

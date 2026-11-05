@@ -533,5 +533,11 @@
     legend: legend,
     gradientLegend: gradientLegend,
     disposeAll: disposeAll,
+    mount: mount,
+    makeTip: makeTip,
+    localPoint: localPoint,
+    columnPath: columnPath,
+    niceDomain: niceDomain,
+    ticks: ticks,
   };
 })();

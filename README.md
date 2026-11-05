@@ -1,26 +1,36 @@
 # DataP
 
-**Tu espacio de organización**: proyectos, tareas, notas y análisis de datos en un
-solo lugar. Es la base de una super app de organización y funciona como web
-o como app instalable en el móvil, sin servidor y sin instalar nada.
+**Tu espacio de organización**: proyectos, tareas, calendario, notas, hábitos,
+enfoque y análisis de datos en un solo lugar. Es la base de una super app de
+organización y funciona como web o como app instalable en el móvil, sin servidor y
+sin instalar nada.
 
 ## Qué incluye
 
 | Sección | Qué hace |
 |---|---|
-| **Panel** | Resumen del día: tareas próximas (atrasadas primero), avance de cada proyecto, notas recientes y accesos rápidos. |
-| **Tareas** | Tablero *Por hacer / En curso / Hecho*. Arrastra entre columnas, añade con Enter, filtra por proyecto o prioridad, fechas límite y avisos de atraso. |
+| **Panel** | Resumen del día: tareas próximas (atrasadas primero), hábitos de hoy, temporizador de enfoque, avance de cada proyecto y notas recientes. |
+| **Tareas** | Tablero *Por hacer / En curso / Hecho*. Arrastra entre columnas, filtra por proyecto o prioridad. Cada tarea admite subtareas, fecha límite y repetición. |
+| **Calendario** | Mes completo con las tareas en su fecha. Arrastra una tarea a otro día (o desde *Sin fecha*) para reprogramarla; toca un día para añadir tareas en esa fecha. |
 | **Notas** | Editor con guardado automático, vista previa con formato simple (`## título`, `- lista`, `**negrita**`, `- [ ] pendiente`, enlaces) y notas fijadas. |
+| **Hábitos** | Marca cada día lo que quieres repetir. Racha actual, mejor racha, cumplimiento de 30 días y mapa de los últimos 6 meses. Puedes corregir los últimos 7 días. |
+| **Enfoque** | Temporizador por bloques (25 min + descansos) unido a una tarea. Sigue contando aunque cambies de página, avisa al terminar y registra los minutos por tarea y por día. |
 | **Proyectos** | Cada proyecto agrupa sus tareas, notas, enlaces y reportes, con su porcentaje de avance. |
 | **Reporte · Segmentación de clientes** | Resultados del notebook PCA: correlación, varianza, cargas, segmentación e interpretación ejecutiva. |
 | **Laboratorio PCA** | Sube un `.xlsx` o `.csv` y repite el análisis en el navegador (mismos resultados que scikit-learn). Descarga CSV o guarda el resumen como nota de un proyecto. |
-| **Ajustes** | Tema claro/oscuro/sistema, exportar e importar respaldo, restablecer datos, atajos. |
+| **Ajustes** | Tema claro/oscuro/sistema, exportar e importar respaldo, restablecer datos, guía de captura y atajos. |
 
 Además:
 
-- **Buscador `Ctrl + K`** (`⌘ + K` en Mac, o `/`): ve a cualquier página, proyecto, tarea o
-  nota, o escribe algo y créalo como tarea o nota.
-- **Deshacer**: completar, mover o eliminar muestra un aviso con *Deshacer*.
+- **Captura inteligente**: escribe la tarea como la dirías y DataP entiende el resto.
+  `Llamar a Ana el viernes !alta #datap` crea «Llamar a Ana» para el viernes, prioridad
+  alta, en el proyecto DataP. Entiende `hoy`, `mañana`, `el 15`, `15/12`,
+  `24 de diciembre`, `en 3 días`, `la próxima semana`, `!alta`/`!media`/`!baja`,
+  `#proyecto` y repeticiones como `cada día`, `cada lunes`, `entre semana` o `cada mes`.
+- **Tareas que se repiten**: al completarla se crea la siguiente con su nueva fecha.
+- **Buscador `Ctrl + K`** (`⌘ + K` en Mac, o `/`): ve a cualquier página, proyecto, tarea,
+  nota o hábito, o escribe algo y créalo. **`N`** abre una tarea nueva.
+- **Deshacer**: completar, mover, reprogramar o eliminar muestra un aviso con *Deshacer*.
 - **App instalable y sin conexión** cuando se publica (GitHub Pages): menú del navegador ›
   *Añadir a pantalla de inicio*.
 
@@ -28,7 +38,8 @@ Además:
 
 En **tu navegador** (localStorage), en ese dispositivo. No se envían a ningún servidor.
 Para pasarlos a otro equipo o tener copia, usa *Ajustes › Exportar respaldo* (archivo
-`.json`) y luego *Importar* en el otro navegador. Si borras los datos del sitio en el
+`.json`) y luego *Importar* en el otro navegador. Los respaldos de versiones anteriores
+se pueden importar sin problema. Si borras los datos del sitio en el
 navegador, se pierden: exporta un respaldo de vez en cuando.
 
 ## Cómo abrirla
@@ -63,13 +74,17 @@ DataP/
         │   └── app.css               ← Tablero, notas, diálogos, buscador, avisos
         ├── js/
         │   ├── app.js                ← Núcleo: menú, rutas, tema, atajos
-        │   ├── store.js              ← Proyectos, tareas y notas (guardado y respaldo)
-        │   ├── ui.js                 ← Diálogos, avisos, buscador, formato de notas
+        │   ├── store.js              ← Proyectos, tareas, notas, hábitos y enfoque
+        │   ├── ui.js                 ← Diálogos, avisos, buscador, captura inteligente
+        │   ├── focus.js              ← Temporizador de enfoque
         │   ├── lib/                  ← PCA, lectura de Excel/CSV, gráficos SVG
         │   └── modules/              ← Una página por archivo
         │       ├── inicio.js         ← Panel
         │       ├── tareas.js
+        │       ├── calendario.js
         │       ├── notas.js
+        │       ├── habitos.js
+        │       ├── enfoque.js
         │       ├── proyectos.js
         │       ├── analisis-pca.js   ← Reporte del notebook
         │       ├── laboratorio.js
